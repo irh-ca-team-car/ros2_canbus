@@ -64,10 +64,10 @@ int main(int argc, char *argv[])
     {
         RCLCPP_WARN((*ros_log),"Could not set canbus speed, run as root or set manually and restart the node");
         RCLCPP_WARN((*ros_log),"If you already did these step, ignore the warning");
-        RCLCPP_WARN((*ros_log),"\tifconfig can%d down",channel);
-        RCLCPP_WARN((*ros_log),"\tip link set can%d type can bitrate %d",channel,bitrate);
-        RCLCPP_WARN((*ros_log),"\tip link set up can%d",channel);
-        RCLCPP_WARN((*ros_log),"\tifconfig can%d up",channel);
+        RCLCPP_WARN((*ros_log),"\tsudo ifconfig can%d down",channel);
+        RCLCPP_WARN((*ros_log),"\tsudo ip link set can%d type can bitrate %d",channel,bitrate);
+        RCLCPP_WARN((*ros_log),"\tsudo ip link set up can%d",channel);
+        RCLCPP_WARN((*ros_log),"\tsudo ifconfig can%d up",channel);
         RCLCPP_WARN((*ros_log),"If you already did these step, ignore the warning");
     }
     else
