@@ -60,10 +60,23 @@ int main(int argc, char *argv[])
     RCLCPP_INFO((*ros_log),"\tout_topic=%s",out_topic.c_str());
     
     RCLCPP_INFO((*ros_log),"Configuring canbus");
-    SYSTEM("sudo ifconfig can%d down\n", channel);
-    SYSTEM("sudo ip link set can%d type can bitrate %d\n",channel, bitrate);
-    SYSTEM("sudo ip link set up can%d\n", channel);
-    SYSTEM("sudo ifconfig can%d up\n", channel);
+    if(geteuid())
+    {
+        RCLCPP_WARN((*ros_log),"Could not set canbus speed, run as root or set manually and restart the node");
+        RCLCPP_WARN((*ros_log),"If you already did these step, ignore the warning");
+        RCLCPP_WARN((*ros_log),"\tifconfig can%d down",channel);
+        RCLCPP_WARN((*ros_log),"\tip link set can%d type can bitrate %d",channel,bitrate);
+        RCLCPP_WARN((*ros_log),"\tip link set up can%d",channel);
+        RCLCPP_WARN((*ros_log),"\tifconfig can%d up",channel);
+        RCLCPP_WARN((*ros_log),"If you already did these step, ignore the warning");
+    }
+    else
+    {
+        SYSTEM("ifconfig can%d down\n", channel);
+        SYSTEM("ip link set can%d type can bitrate %d\n",channel, bitrate);
+        SYSTEM("ip link set up can%d\n", channel);
+        SYSTEM("ifconfig can%d up\n", channel);
+    }
 
     struct timeval timeout;
     timeout.tv_sec = 0;
