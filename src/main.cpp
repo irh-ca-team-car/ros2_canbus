@@ -31,7 +31,7 @@
 #define UNINITIALIZED_SOCKET (-1)
 #define CAN_MESSAGE_TIMEOUT (100)
 using namespace rclcpp;
-int channel = 0;
+int channel = 0,bitrate=500000;
 Node::SharedPtr n;
 std::string out_topic;
 int init_can_socket(const char *can_channel,
@@ -49,12 +49,19 @@ int main(int argc, char *argv[])
     n = std::make_shared<rclcpp::Node>("ros2_canbus_reader");
 
     channel = n->declare_parameter<int>("channel", 0);
+    bitrate = n->declare_parameter<int>("bitrate",500000);
     out_topic = n->declare_parameter<std::string>("out_topic", "canbus");
-
-    SYSTEM("ifconfig can%d down\n", channel);
-    SYSTEM("ip link set can%d type can bitrate 500000\n", channel);
-    SYSTEM("ip link set up can%d\n", channel);
-    SYSTEM("ifconfig can%d up\n", channel);
+    auto log=n->get_logger();
+    RCLCPP_INFO(log,"Parameters");
+    RCLCPP_INFO(log,"\tchannel=can%d",channel);
+    RCLCPP_INFO(log,"\tbitrate=%d",bitrate);
+    RCLCPP_INFO(log,"\tout_topic=%s",out_topic.c_str());
+    
+    RCLCPP_INFO(log,"Configuring canbus");
+    SYSTEM("sudo ifconfig can%d down\n", channel);
+    SYSTEM("sudo ip link set can%d type can bitrate %d\n",channel, bitrate);
+    SYSTEM("sudo ip link set up can%d\n", channel);
+    SYSTEM("sudo ifconfig can%d up\n", channel);
 
     struct timeval timeout;
     timeout.tv_sec = 0;
@@ -66,6 +73,7 @@ int main(int argc, char *argv[])
     sock = init_can_socket(can_string_buffer, &timeout);
 
     auto pub = n->create_publisher<can_msgs::msg::Frame>(out_topic, 100);
+    RCLCPP_INFO(log,"Publisher created");
     while (rclcpp::ok())
     {
         struct can_frame rx_frame;
