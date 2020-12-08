@@ -33,6 +33,7 @@
 using namespace rclcpp;
 int channel = 0,bitrate=500000;
 Node::SharedPtr n;
+rclcpp::Logger *ros_log;
 std::string out_topic;
 int init_can_socket(const char *can_channel,
                     struct timeval *tv);
@@ -52,12 +53,13 @@ int main(int argc, char *argv[])
     bitrate = n->declare_parameter<int>("bitrate",500000);
     out_topic = n->declare_parameter<std::string>("out_topic", "canbus");
     auto log=n->get_logger();
-    RCLCPP_INFO(log,"Parameters");
-    RCLCPP_INFO(log,"\tchannel=can%d",channel);
-    RCLCPP_INFO(log,"\tbitrate=%d",bitrate);
-    RCLCPP_INFO(log,"\tout_topic=%s",out_topic.c_str());
+    ros_log=&log;
+    RCLCPP_INFO((*ros_log),"Parameters");
+    RCLCPP_INFO((*ros_log),"\tchannel=can%d",channel);
+    RCLCPP_INFO((*ros_log),"\tbitrate=%d",bitrate);
+    RCLCPP_INFO((*ros_log),"\tout_topic=%s",out_topic.c_str());
     
-    RCLCPP_INFO(log,"Configuring canbus");
+    RCLCPP_INFO((*ros_log),"Configuring canbus");
     SYSTEM("sudo ifconfig can%d down\n", channel);
     SYSTEM("sudo ip link set can%d type can bitrate %d\n",channel, bitrate);
     SYSTEM("sudo ip link set up can%d\n", channel);
@@ -73,7 +75,7 @@ int main(int argc, char *argv[])
     sock = init_can_socket(can_string_buffer, &timeout);
 
     auto pub = n->create_publisher<can_msgs::msg::Frame>(out_topic, 100);
-    RCLCPP_INFO(log,"Publisher created");
+    RCLCPP_INFO((*ros_log),"Publisher created");
     while (rclcpp::ok())
     {
         struct can_frame rx_frame;
@@ -90,7 +92,10 @@ int main(int argc, char *argv[])
             f.dlc = rx_frame.can_dlc;
             pub->publish(f);
         }
+        rclcpp::spin_some(n);
     }
+    RCLCPP_INFO((*ros_log),"Shutdown requested");
+    rclcpp::shutdown();
     close(sock);
 
     return 0;
@@ -114,7 +119,7 @@ int init_can_socket(const char *can_channel,
 
     if (sock < 0)
     {
-        perror("Opening CAN socket failed:");
+        RCLCPP_ERROR((*ros_log),"Opening CAN socket failed");
         exit(-1);
     }
     else
@@ -125,8 +130,7 @@ int init_can_socket(const char *can_channel,
 
         if (valid < 0)
         {
-            perror("Finding CAN index failed:");
-            exit(-1);
+            RCLCPP_ERROR((*ros_log),"Finding CAN index failed");
         }
     }
 
@@ -142,8 +146,7 @@ int init_can_socket(const char *can_channel,
 
         if (valid < 0)
         {
-            perror("Setting timeout failed:");
-            exit(-1);
+            RCLCPP_ERROR((*ros_log),"Setting timeout failed");
         }
     }
 
@@ -161,8 +164,7 @@ int init_can_socket(const char *can_channel,
 
         if (valid < 0)
         {
-            perror("Socket binding failed:");
-            exit(-1);
+            RCLCPP_ERROR((*ros_log),"Socket binding failed");
         }
     }
 
