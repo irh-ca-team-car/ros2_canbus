@@ -31,10 +31,10 @@
 #define UNINITIALIZED_SOCKET (-1)
 #define CAN_MESSAGE_TIMEOUT (100)
 using namespace rclcpp;
-int channel = 0,bitrate=500000;
+int channel = 0, bitrate = 500000;
 Node::SharedPtr n;
 rclcpp::Logger *ros_log;
-std::string out_topic;
+std::string out_topic, back_topic;
 int init_can_socket(const char *can_channel,
                     struct timeval *tv);
 int sock = UNINITIALIZED_SOCKET;
@@ -49,34 +49,18 @@ int main(int argc, char *argv[])
     rclcpp::init(argc, argv);
     n = std::make_shared<rclcpp::Node>("ros2_canbus_reader");
 
-    channel = n->declare_parameter<int>("channel", 0);
-    bitrate = n->declare_parameter<int>("bitrate",500000);
+    channel = n->declare_parameter<int>("channel", 1);
+    bitrate = n->declare_parameter<int>("bitrate", 500000);
     out_topic = n->declare_parameter<std::string>("out_topic", "canbus");
-    auto log=n->get_logger();
-    ros_log=&log;
-    RCLCPP_INFO((*ros_log),"Parameters");
-    RCLCPP_INFO((*ros_log),"\tchannel=can%d",channel);
-    RCLCPP_INFO((*ros_log),"\tbitrate=%d",bitrate);
-    RCLCPP_INFO((*ros_log),"\tout_topic=%s",out_topic.c_str());
-    
-    RCLCPP_INFO((*ros_log),"Configuring canbus");
-    if(geteuid())
-    {
-        RCLCPP_WARN((*ros_log),"Could not set canbus speed, run as root or set manually and restart the node");
-        RCLCPP_WARN((*ros_log),"If you already did these step, ignore the warning");
-        RCLCPP_WARN((*ros_log),"\tsudo ifconfig can%d down",channel);
-        RCLCPP_WARN((*ros_log),"\tsudo ip link set can%d type can bitrate %d",channel,bitrate);
-        RCLCPP_WARN((*ros_log),"\tsudo ip link set up can%d",channel);
-        RCLCPP_WARN((*ros_log),"\tsudo ifconfig can%d up",channel);
-        RCLCPP_WARN((*ros_log),"If you already did these step, ignore the warning");
-    }
-    else
-    {
-        SYSTEM("ifconfig can%d down\n", channel);
-        SYSTEM("ip link set can%d type can bitrate %d\n",channel, bitrate);
-        SYSTEM("ip link set up can%d\n", channel);
-        SYSTEM("ifconfig can%d up\n", channel);
-    }
+    back_topic = n->declare_parameter<std::string>("back_topic", "canbus/inject");
+    auto log = n->get_logger();
+    ros_log = &log;
+    RCLCPP_INFO((*ros_log), "Parameters");
+    RCLCPP_INFO((*ros_log), "\tchannel=can%d", channel);
+    RCLCPP_INFO((*ros_log), "\tbitrate=%d", bitrate);
+    RCLCPP_INFO((*ros_log), "\tout_topic=%s", out_topic.c_str());
+
+    RCLCPP_INFO((*ros_log), "Configuring canbus");
 
     struct timeval timeout;
     timeout.tv_sec = 0;
@@ -88,7 +72,24 @@ int main(int argc, char *argv[])
     sock = init_can_socket(can_string_buffer, &timeout);
 
     auto pub = n->create_publisher<can_msgs::msg::Frame>(out_topic, 100);
-    RCLCPP_INFO((*ros_log),"Publisher created");
+    auto sub = n->create_subscription<can_msgs::msg::Frame>(back_topic, 0,
+                                                            [sock, ros_log](can_msgs::msg::Frame::SharedPtr msg)
+                                                            {
+                                                                struct can_frame tx_frame;
+
+                                                                tx_frame.can_id = msg->id;
+                                                                tx_frame.can_dlc = msg->dlc;
+                                                                for (int i = 0; i < 8; i++)
+                                                                    tx_frame.data[i]=  msg->data[i] ;
+                                                                
+                                                                int res = write(sock, &tx_frame, sizeof(struct can_frame));
+
+                                                                if (res != sizeof(struct can_frame)) {
+                                                                    RCLCPP_ERROR((*ros_log),"[Can Utils] CAN bus Write error");
+                                                                    return 0;
+                                                                } });
+
+    RCLCPP_INFO((*ros_log), "Publisher created");
     while (rclcpp::ok())
     {
         struct can_frame rx_frame;
@@ -105,9 +106,10 @@ int main(int argc, char *argv[])
             f.dlc = rx_frame.can_dlc;
             pub->publish(f);
         }
+
         rclcpp::spin_some(n);
     }
-    RCLCPP_INFO((*ros_log),"Shutdown requested");
+    RCLCPP_INFO((*ros_log), "Shutdown requested");
     rclcpp::shutdown();
     close(sock);
 
@@ -132,7 +134,7 @@ int init_can_socket(const char *can_channel,
 
     if (sock < 0)
     {
-        RCLCPP_ERROR((*ros_log),"Opening CAN socket failed");
+        RCLCPP_ERROR((*ros_log), "Opening CAN socket failed");
         exit(-1);
     }
     else
@@ -143,12 +145,12 @@ int init_can_socket(const char *can_channel,
 
         if (valid < 0)
         {
-            RCLCPP_ERROR((*ros_log),"Finding CAN index failed");
+            RCLCPP_ERROR((*ros_log), "Finding CAN index failed");
         }
     }
 
-    //If a timeout has been specified set one here since it should be set before
-    //the bind call
+    // If a timeout has been specified set one here since it should be set before
+    // the bind call
     if (valid >= 0 && tv != NULL)
     {
         valid = setsockopt(sock,
@@ -159,7 +161,7 @@ int init_can_socket(const char *can_channel,
 
         if (valid < 0)
         {
-            RCLCPP_ERROR((*ros_log),"Setting timeout failed");
+            RCLCPP_ERROR((*ros_log), "Setting timeout failed");
         }
     }
 
@@ -177,7 +179,7 @@ int init_can_socket(const char *can_channel,
 
         if (valid < 0)
         {
-            RCLCPP_ERROR((*ros_log),"Socket binding failed");
+            RCLCPP_ERROR((*ros_log), "Socket binding failed");
         }
     }
 
